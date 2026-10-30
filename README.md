@@ -122,6 +122,8 @@ bash redis/test/smoke.sh cloudron-redis:dev
 bash test/integration.sh cloudron-sockudo:dev cloudron-redis:dev
 ```
 
+CI also checks every `CloudronVersions.json` with `@cloudron/manifest-format`, the library a Cloudron server uses to accept or reject a community app, before it builds anything.
+
 ## License
 
 The packaging is MIT-licensed, like Sockudo itself.

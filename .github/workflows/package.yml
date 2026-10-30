@@ -64,6 +64,16 @@ jobs:
             echo "published=${published}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Validate for Cloudron
+        working-directory: .
+        run: |
+          # Same checks a Cloudron server runs on CloudronVersions.json, applied to the file as it
+          # would look after publishing this version
+          npm install --silent --no-save --prefix /tmp/manifest-format @cloudron/manifest-format@6.7.1
+          cp scripts/validate-versions.mjs /tmp/manifest-format/
+          python3 scripts/add-version.py "${{ inputs.app }}" /tmp/CloudronVersions.preview.json
+          node /tmp/manifest-format/validate-versions.mjs /tmp/CloudronVersions.preview.json
+
       - name: Build image
         run: docker build --pull -t "app:test" .
 
