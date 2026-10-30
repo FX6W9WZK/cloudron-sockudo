@@ -1,0 +1,118 @@
+name: Package
+
+# Reusable: builds one app's image and runs its smoke test. With publish=true and a
+# manifest version that is not yet in the app's CloudronVersions.json, it also pushes the
+# image to GHCR, records the version and creates a tagged GitHub release. Cloudron
+# installations that added the app as a community app pick the new version up from there.
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: App directory (. = Sockudo, redis = Redis)
+        type: string
+        required: true
+      ref:
+        description: Commit to build
+        type: string
+        required: true
+      publish:
+        type: boolean
+        required: true
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    concurrency:
+      group: package-${{ inputs.app }}-${{ inputs.publish }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: ${{ inputs.app }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Read manifest
+        id: meta
+        run: |
+          version=$(jq -r .version CloudronManifest.json)
+          image=$(jq -r .dockerImage CloudronManifest.json)
+          upstream=$(jq -r .upstreamVersion CloudronManifest.json)
+          title=$(jq -r .title CloudronManifest.json)
+          [[ "${image}" == *":${version}" ]] || { echo "dockerImage tag must equal version (${image} vs ${version})"; exit 1; }
+          grep -q "^\[${version}\]$" CHANGELOG.md || { echo "CHANGELOG.md has no [${version}] section"; exit 1; }
+          published=false
+          if [[ -f CloudronVersions.json ]] && jq -e --arg v "${version}" '.versions[$v]' CloudronVersions.json > /dev/null; then
+            published=true
+            if [[ "${{ inputs.publish }}" == "true" ]]; then
+              echo "::notice::${title} ${version} is already published - building and testing only. Bump the version in CloudronManifest.json to publish."
+            fi
+          fi
+          if [[ "${{ inputs.app }}" == "." ]]; then tag="v${version}"; else tag="${{ inputs.app }}-v${version}"; fi
+          {
+            echo "version=${version}"
+            echo "image=${image}"
+            echo "upstream=${upstream}"
+            echo "title=${title}"
+            echo "tag=${tag}"
+            echo "published=${published}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: docker build --pull -t "app:test" .
+
+      - name: Smoke test
+        run: bash test/smoke.sh app:test
+
+      - name: Container logs
+        if: always()
+        run: cat /tmp/*-smoke.log 2> /dev/null || true
+
+      - name: Push image
+        if: inputs.publish && steps.meta.outputs.published == 'false'
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker tag app:test "${IMAGE}"
+          docker tag app:test "${IMAGE%:*}:latest"
+          docker push "${IMAGE}"
+          docker push "${IMAGE%:*}:latest"
+
+      - name: Record version and release
+        if: inputs.publish && steps.meta.outputs.published == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP: ${{ inputs.app }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          UPSTREAM: ${{ steps.meta.outputs.upstream }}
+          TITLE: ${{ steps.meta.outputs.title }}
+          IMAGE: ${{ steps.meta.outputs.image }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The other app may publish at the same time, so retry on a moved main
+          for attempt in 1 2 3; do
+            git fetch -q origin main
+            git checkout -q -B main origin/main
+            [[ "$(jq -r .version "${APP}/CloudronManifest.json")" == "${VERSION}" ]] || { echo "main moved on to another ${TITLE} version, not recording ${VERSION}"; exit 1; }
+            python3 scripts/add-version.py "${APP}"
+            git add "${APP}/CloudronVersions.json"
+            git commit -q -m "Publish ${TITLE} ${VERSION} (upstream ${UPSTREAM})"
+            if git push -q origin main; then break; fi
+            [[ ${attempt} == 3 ]] && exit 1
+            sleep $((attempt * 5))
+          done
+          git tag "${TAG}"
+          git push -q origin "${TAG}"
+          awk -v ver="[${VERSION}]" '$0 == ver { found=1; next } found && /^\[/ { exit } found { print }' "${APP}/CHANGELOG.md" > /tmp/notes.md
+          printf '\nImage: `%s`\n' "${IMAGE}" >> /tmp/notes.md
+          gh release create "${TAG}" --title "${TITLE} ${VERSION} (upstream ${UPSTREAM})" --notes-file /tmp/notes.md --latest="$([[ "${APP}" == "." ]] && echo true || echo false)"

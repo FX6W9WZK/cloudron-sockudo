@@ -3,7 +3,7 @@
   "title": "Sockudo",
   "author": "Sockudo contributors",
   "tagline": "Fast, self-hosted Pusher-compatible WebSocket server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "upstreamVersion": "5.2.0",
   "description": "file://DESCRIPTION.md",
   "changelog": "file://CHANGELOG.md",
@@ -18,8 +18,13 @@
   "mediaLinks": [
     "https://raw.githubusercontent.com/sockudo/sockudo/master/docs/public/sockudo-logo/sockudo-logo-color.png"
   ],
-  "tags": [ "developer", "websocket", "realtime", "pusher" ],
-  "dockerImage": "ghcr.io/fx6w9wzk/cloudron-sockudo:1.0.0",
+  "tags": [
+    "developer",
+    "websocket",
+    "realtime",
+    "pusher"
+  ],
+  "dockerImage": "ghcr.io/fx6w9wzk/cloudron-sockudo:1.1.0",
   "healthCheckPath": "/up",
   "httpPort": 6001,
   "memoryLimit": 536870912,

@@ -1,0 +1,9 @@
+# Your Redis settings. Included after the generated base configuration, so values set here win.
+# Restart the app after editing. Reference: https://redis.io/docs/latest/operate/oss_and_stack/management/config/
+#
+# Port, TLS certificate, password and data directory are managed by the package - don't set them here.
+#
+# Examples:
+# maxmemory-policy allkeys-lru
+# appendonly no
+# databases 32

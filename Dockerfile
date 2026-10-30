@@ -16,7 +16,7 @@ RUN curl -fsSL -o /tmp/sockudo.tgz \
     chmod 0755 /app/code/sockudo && \
     /app/code/sockudo --version
 
-COPY config.json.template env.sh.template start.sh /app/pkg/
+COPY config.json.template env.sh.template redis-env.py start.sh /app/pkg/
 RUN chmod +x /app/pkg/start.sh
 
 CMD [ "/app/pkg/start.sh" ]

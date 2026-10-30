@@ -25,13 +25,6 @@ fi
 export HOST=0.0.0.0
 export PORT=6001
 
-# Redis addon (used when a driver in config.json is set to "redis"). Credentials can change
-# between restarts, so they are injected here instead of being written into config.json.
-export DATABASE_REDIS_HOST="${CLOUDRON_REDIS_HOST}"
-export DATABASE_REDIS_PORT="${CLOUDRON_REDIS_PORT}"
-export DATABASE_REDIS_PASSWORD="${CLOUDRON_REDIS_PASSWORD}"
-export REDIS_URL="${CLOUDRON_REDIS_URL}"
-
 # Exactly one trusted proxy (Cloudron's nginx) appends to X-Forwarded-For
 export RATE_LIMITER_API_TRUST_HOPS=1
 export RATE_LIMITER_WS_TRUST_HOPS=1
@@ -40,6 +33,21 @@ export LOG_COLORS_ENABLED=false
 
 # User overrides (see https://sockudo.io/docs/reference/environment-variables)
 source /app/data/env.sh
+
+# Redis (used when a driver in config.json is set to "redis"). Either the Cloudron addon (default)
+# or an external server set via SOCKUDO_REDIS_URL in env.sh. Credentials are injected on every
+# start instead of being written into config.json, because the addon's can change.
+if [[ -n "${SOCKUDO_REDIS_URL:-}" ]]; then
+    redis_env=$(python3 /app/pkg/redis-env.py "${SOCKUDO_REDIS_URL}")
+    eval "${redis_env}"
+    echo "==> Using external Redis at ${DATABASE_REDIS_HOST}:${DATABASE_REDIS_PORT} (db ${DATABASE_REDIS_DB}, tls ${DATABASE_REDIS_MASTER_TLS_ENABLED})"
+else
+    export DATABASE_REDIS_HOST="${CLOUDRON_REDIS_HOST}"
+    export DATABASE_REDIS_PORT="${CLOUDRON_REDIS_PORT}"
+    export DATABASE_REDIS_PASSWORD="${CLOUDRON_REDIS_PASSWORD}"
+    export REDIS_URL="${CLOUDRON_REDIS_URL}"
+    echo "==> Using the Cloudron Redis addon"
+fi
 
 chown -R cloudron:cloudron /app/data
 

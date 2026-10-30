@@ -5,3 +5,4 @@ scripts
 CloudronVersions.json
 *.md
 logo.png
+redis
