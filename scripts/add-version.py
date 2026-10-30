@@ -6,9 +6,11 @@ CloudronVersions.json to discover updates. `file://` references in the
 manifest are inlined, and the changelog is reduced to the current version's
 section, the same way `cloudron versions add` does it.
 
-Usage: add-version.py [app-dir]   (default: repository root, i.e. Sockudo)
+Usage: add-version.py [app-dir] [output]   (default: repository root, i.e. Sockudo)
 
-Exits 0 without changes when the version is already recorded.
+With `output`, the result goes to that file instead of the app's CloudronVersions.json,
+which CI uses to validate what would be published. Exits 0 without changes when the
+version is already recorded.
 """
 
 import json
@@ -22,6 +24,7 @@ REPO = Path(__file__).resolve().parent.parent
 ROOT = REPO / (sys.argv[1] if len(sys.argv) > 1 else ".")
 MANIFEST = ROOT / "CloudronManifest.json"
 VERSIONS = ROOT / "CloudronVersions.json"
+OUTPUT = Path(sys.argv[2]) if len(sys.argv) > 2 else VERSIONS
 
 
 def changelog_section(text, version):
@@ -52,6 +55,8 @@ def main():
     catalog = json.loads(VERSIONS.read_text()) if VERSIONS.exists() else {"stable": True, "versions": {}}
     if version in catalog["versions"]:
         print(f"{version} already recorded, nothing to do")
+        if OUTPUT != VERSIONS:
+            OUTPUT.write_text(json.dumps(catalog, indent=2) + "\n")
         return
 
     now = format_datetime(datetime.now(timezone.utc), usegmt=True)
@@ -61,7 +66,7 @@ def main():
         "ts": now,
         "publishState": "published",
     }
-    VERSIONS.write_text(json.dumps(catalog, indent=2) + "\n")
+    OUTPUT.write_text(json.dumps(catalog, indent=2) + "\n")
     print(f"recorded {version} ({manifest['dockerImage']})")
 
 
