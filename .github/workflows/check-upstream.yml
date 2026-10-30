@@ -1,0 +1,83 @@
+name: Check upstream
+
+# Daily check for a new Sockudo release. When one is found, the Dockerfile and
+# manifest are bumped, committed to main, and the build workflow publishes the
+# new package version.
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: check-upstream
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    outputs:
+      ref: ${{ steps.bump.outputs.ref }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      # GitHub disables scheduled workflows after 60 days without repository activity
+      - name: Keep schedule alive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/check-upstream.yml/enable"
+
+      - name: Bump to latest Sockudo release
+        id: bump
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          latest=$(gh api repos/sockudo/sockudo/releases/latest --jq .tag_name)
+          latest="${latest#v}"
+          current=$(jq -r .upstreamVersion CloudronManifest.json)
+          echo "current ${current}, latest ${latest}"
+
+          if [[ ! "${latest}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::warning::ignoring non-semver upstream tag ${latest}"
+            exit 0
+          fi
+          if [[ "$(printf '%s\n%s\n' "${current}" "${latest}" | sort -V | tail -1)" == "${current}" ]]; then
+            echo "up to date"
+            exit 0
+          fi
+
+          asset="sockudo-v${latest}-x86_64-unknown-linux-musl.tgz"
+          digest=$(gh api "repos/sockudo/sockudo/releases/tags/v${latest}" \
+            --jq ".assets[] | select(.name == \"${asset}\") | .digest // empty")
+          sha256="${digest#sha256:}"
+          [[ -n "${sha256}" ]] || { echo "::error::release v${latest} has no ${asset} (yet)"; exit 1; }
+
+          # Cross-check GitHub's asset digest against the checksum file published with the release
+          published_sha=$(curl -fsSL "https://github.com/sockudo/sockudo/releases/download/v${latest}/${asset}.sha256" | awk '{print $1}')
+          [[ "${published_sha}" == "${sha256}" ]] || { echo "::error::checksum mismatch for ${asset}"; exit 1; }
+
+          version=$(python3 scripts/bump-upstream.py "${latest}" "${sha256}")
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Dockerfile CloudronManifest.json CHANGELOG.md
+          git commit -m "Update Sockudo to ${latest} (package ${version})"
+          git push origin main
+          echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: check
+    if: needs.check.outputs.ref != ''
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ needs.check.outputs.ref }}

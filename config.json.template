@@ -1,0 +1,56 @@
+{
+  "debug": false,
+  "path_prefix": "/",
+  "activity_timeout": 120,
+  "adapter": {
+    "driver": "local"
+  },
+  "cache": {
+    "driver": "redis"
+  },
+  "queue": {
+    "driver": "redis"
+  },
+  "rate_limiter": {
+    "enabled": false,
+    "driver": "redis"
+  },
+  "metrics": {
+    "enabled": true,
+    "driver": "prometheus",
+    "host": "127.0.0.1",
+    "port": 9601
+  },
+  "cors": {
+    "credentials": true,
+    "origin": ["*"],
+    "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    "allowed_headers": ["Authorization", "Content-Type", "X-Requested-With", "Accept"]
+  },
+  "app_manager": {
+    "driver": "memory",
+    "array": {
+      "apps": [
+        {
+          "id": "__APP_ID__",
+          "key": "__APP_KEY__",
+          "secret": "__APP_SECRET__",
+          "enabled": true,
+          "policy": {
+            "limits": {
+              "max_connections": 10000,
+              "max_client_events_per_second": 100
+            },
+            "features": {
+              "enable_client_messages": false,
+              "enable_user_authentication": false
+            },
+            "channels": {
+              "allowed_origins": ["*"]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
