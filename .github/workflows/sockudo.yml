@@ -1,0 +1,32 @@
+name: Sockudo
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - Dockerfile
+      - start.sh
+      - redis-env.py
+      - config.json.template
+      - env.sh.template
+      - CloudronManifest.json
+      - CHANGELOG.md
+      - DESCRIPTION.md
+      - POSTINSTALL.md
+      - logo.png
+      - test/smoke.sh
+      - .github/workflows/sockudo.yml
+      - .github/workflows/package.yml
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  package:
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/package.yml
+    with:
+      app: .
+      ref: ${{ github.sha }}
+      publish: ${{ github.event_name != 'pull_request' }}

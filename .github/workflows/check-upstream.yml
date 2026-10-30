@@ -1,8 +1,8 @@
 name: Check upstream
 
-# Daily check for a new Sockudo release. When one is found, the Dockerfile and
-# manifest are bumped, committed to main, and the build workflow publishes the
-# new package version.
+# Daily check for new Sockudo and Redis releases. When one is found, the app's Dockerfile and
+# manifest are bumped and committed to main, and the package workflow publishes the new
+# package version.
 
 on:
   schedule:
@@ -20,7 +20,9 @@ jobs:
       contents: write
       actions: write
     outputs:
-      ref: ${{ steps.bump.outputs.ref }}
+      ref: ${{ steps.commit.outputs.ref }}
+      sockudo: ${{ steps.sockudo.outputs.bumped }}
+      redis: ${{ steps.redis.outputs.bumped }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,8 +35,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/check-upstream.yml/enable"
 
-      - name: Bump to latest Sockudo release
-        id: bump
+      - name: Sockudo (GitHub releases)
+        id: sockudo
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -45,7 +47,7 @@ jobs:
           echo "current ${current}, latest ${latest}"
 
           if [[ ! "${latest}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::warning::ignoring non-semver upstream tag ${latest}"
+            echo "::warning::ignoring non-semver Sockudo tag ${latest}"
             exit 0
           fi
           if [[ "$(printf '%s\n%s\n' "${current}" "${latest}" | sort -V | tail -1)" == "${current}" ]]; then
@@ -63,21 +65,72 @@ jobs:
           published_sha=$(curl -fsSL "https://github.com/sockudo/sockudo/releases/download/v${latest}/${asset}.sha256" | awk '{print $1}')
           [[ "${published_sha}" == "${sha256}" ]] || { echo "::error::checksum mismatch for ${asset}"; exit 1; }
 
-          version=$(python3 scripts/bump-upstream.py "${latest}" "${sha256}")
+          version=$(python3 scripts/bump-upstream.py . "${latest}" \
+            "https://github.com/sockudo/sockudo/releases/tag/v${latest}" \
+            "SOCKUDO_VERSION=${latest}" "SOCKUDO_SHA256=${sha256}")
+          git add Dockerfile CloudronManifest.json CHANGELOG.md
+          echo "message=Update Sockudo to ${latest} (package ${version})" >> "$GITHUB_OUTPUT"
+          echo "bumped=true" >> "$GITHUB_OUTPUT"
 
+      - name: Redis (packages.redis.io APT repository)
+        id: redis
+        run: |
+          set -euo pipefail
+          codename=noble
+          # Highest stable redis-server version for the base image's Ubuntu release
+          apt_version=$(curl -fsSL "https://packages.redis.io/deb/dists/${codename}/main/binary-amd64/Packages" \
+            | awk '/^Package:/ { pkg = $2 } /^Version:/ && pkg == "redis-server" { print $2 }' \
+            | grep -E "^6:[0-9]+\.[0-9]+\.[0-9]+-1rl1~${codename}1$" | sort -V | tail -1)
+          latest=$(echo "${apt_version}" | sed -E 's/^6:([0-9.]+)-.*/\1/')
+          current=$(jq -r .upstreamVersion redis/CloudronManifest.json)
+          echo "current ${current}, latest ${latest} (${apt_version})"
+
+          [[ -n "${latest}" ]] || { echo "::error::no redis-server version found in the APT index"; exit 1; }
+          if [[ "$(printf '%s\n%s\n' "${current}" "${latest}" | sort -V | tail -1)" == "${current}" ]]; then
+            echo "up to date"
+            exit 0
+          fi
+
+          version=$(python3 scripts/bump-upstream.py redis "${latest}" \
+            "https://github.com/redis/redis/releases/tag/${latest}" \
+            "REDIS_VERSION=${latest}" "REDIS_APT_VERSION=${apt_version}")
+          git add redis/Dockerfile redis/CloudronManifest.json redis/CHANGELOG.md
+          echo "message=Update Redis to ${latest} (package ${version})" >> "$GITHUB_OUTPUT"
+          echo "bumped=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit
+        id: commit
+        if: steps.sockudo.outputs.bumped == 'true' || steps.redis.outputs.bumped == 'true'
+        env:
+          SOCKUDO_MESSAGE: ${{ steps.sockudo.outputs.message }}
+          REDIS_MESSAGE: ${{ steps.redis.outputs.message }}
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Dockerfile CloudronManifest.json CHANGELOG.md
-          git commit -m "Update Sockudo to ${latest} (package ${version})"
-          git push origin main
+          git commit -q -m "$(printf '%s\n' "${SOCKUDO_MESSAGE}" "${REDIS_MESSAGE}" | sed '/^$/d')"
+          git push -q origin main
           echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-  build:
+  sockudo:
     needs: check
-    if: needs.check.outputs.ref != ''
+    if: needs.check.outputs.sockudo == 'true'
     permissions:
       contents: write
       packages: write
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/package.yml
     with:
+      app: .
       ref: ${{ needs.check.outputs.ref }}
+      publish: true
+
+  redis:
+    needs: check
+    if: needs.check.outputs.redis == 'true'
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/package.yml
+    with:
+      app: redis
+      ref: ${{ needs.check.outputs.ref }}
+      publish: true

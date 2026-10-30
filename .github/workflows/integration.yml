@@ -1,0 +1,28 @@
+name: Integration
+
+# Sockudo app connected to the Redis app over TLS, configured through env.sh as a user would.
+# A pull request check; upstream bumps are gated by each app's own smoke test.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  sockudo-with-redis-app:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build images
+        run: |
+          docker build --pull -t sockudo:test .
+          docker build --pull -t redis-app:test redis
+
+      - name: Sockudo -> Redis app over TLS
+        run: bash test/integration.sh sockudo:test redis-app:test
+
+      - name: Container logs
+        if: always()
+        run: |
+          for f in /tmp/it-*.log; do echo "=== ${f}"; cat "${f}"; done 2> /dev/null || true

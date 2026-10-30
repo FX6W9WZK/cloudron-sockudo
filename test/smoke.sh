@@ -6,6 +6,11 @@
 
 set -euo pipefail
 
+# Files written by the container belong to its user; CI needs sudo to read them, Docker Desktop does not
+as_root() {
+    if [[ $(id -u) -ne 0 ]] && sudo -n true 2> /dev/null; then sudo "$@"; else "$@"; fi
+}
+
 IMAGE="$1"
 NET=sockudo-smoke
 DATA=$(mktemp -d)
@@ -13,9 +18,9 @@ REDIS_PASSWORD=smoke-test-password
 
 cleanup() {
     docker logs sockudo-smoke-app > /tmp/sockudo-smoke.log 2>&1 || true
-    docker rm -f sockudo-smoke-app sockudo-smoke-redis > /dev/null 2>&1 || true
+    docker rm -f sockudo-smoke-app sockudo-smoke-redis sockudo-smoke-redis-ext > /dev/null 2>&1 || true
     docker network rm "${NET}" > /dev/null 2>&1 || true
-    sudo rm -rf "${DATA}" 2> /dev/null || rm -rf "${DATA}"
+    as_root rm -rf "${DATA}"
 }
 trap cleanup EXIT
 
@@ -31,7 +36,7 @@ start_app() {
         -e CLOUDRON_REDIS_PORT=6379 \
         -e CLOUDRON_REDIS_PASSWORD="${REDIS_PASSWORD}" \
         -e CLOUDRON_REDIS_URL="redis://default:${REDIS_PASSWORD}@sockudo-smoke-redis:6379" \
-        "${IMAGE}" > /dev/null
+        "$@" "${IMAGE}" > /dev/null
 }
 
 wait_healthy() {
@@ -48,7 +53,7 @@ wait_healthy() {
 }
 
 app_field() {
-    sudo jq -r ".app_manager.array.apps[0].$1" "${DATA}/config.json"
+    as_root jq -r ".app_manager.array.apps[0].$1" "${DATA}/config.json"
 }
 
 echo "==> First start"
@@ -87,6 +92,22 @@ start_app
 wait_healthy
 [[ "$(app_field key)" == "${APP_KEY}" ]] || { echo "!!  app key changed after restart"; exit 1; }
 echo "    app key unchanged"
+
+echo "==> External Redis via SOCKUDO_REDIS_URL"
+# The addon variables point to a host that does not exist: /up (which checks the Redis cache)
+# only becomes healthy if the external server is used.
+docker rm -f sockudo-smoke-app > /dev/null
+docker run -d --name sockudo-smoke-redis-ext --network "${NET}" redis:7-alpine \
+    redis-server --requirepass external-password > /dev/null
+start_app -e CLOUDRON_REDIS_HOST=addon-does-not-exist \
+    -e CLOUDRON_REDIS_URL="redis://default:x@addon-does-not-exist:6379" \
+    -e SOCKUDO_REDIS_URL="redis://default:external-password@sockudo-smoke-redis-ext:6379/3"
+wait_healthy
+# Read the log first: grep -q closing the pipe early would fail the pipeline under pipefail
+log=$(docker logs sockudo-smoke-app 2>&1)
+grep -q "Using external Redis at sockudo-smoke-redis-ext:6379 (db 3, tls false)" <<< "${log}" \
+    || { echo "!!  external Redis not selected"; echo "${log}"; exit 1; }
+echo "    external Redis selected and healthy"
 
 echo "==> Memory usage"
 docker stats --no-stream --format '    {{.MemUsage}}' sockudo-smoke-app

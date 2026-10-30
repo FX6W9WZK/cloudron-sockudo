@@ -6,6 +6,8 @@ CloudronVersions.json to discover updates. `file://` references in the
 manifest are inlined, and the changelog is reduced to the current version's
 section, the same way `cloudron versions add` does it.
 
+Usage: add-version.py [app-dir]   (default: repository root, i.e. Sockudo)
+
 Exits 0 without changes when the version is already recorded.
 """
 
@@ -16,7 +18,8 @@ from datetime import datetime, timezone
 from email.utils import format_datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parent.parent
+ROOT = REPO / (sys.argv[1] if len(sys.argv) > 1 else ".")
 MANIFEST = ROOT / "CloudronManifest.json"
 VERSIONS = ROOT / "CloudronVersions.json"
 

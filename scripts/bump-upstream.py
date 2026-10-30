@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Point the package at a new Sockudo release.
+"""Point a package at a new upstream release.
 
-Usage: bump-upstream.py <upstream-version> <sha256-of-musl-tarball>
+Usage: bump-upstream.py <app-dir> <upstream-version> <release-url> NAME=VALUE [NAME=VALUE ...]
 
-Updates the Dockerfile ARGs, CloudronManifest.json (upstreamVersion, version,
-dockerImage) and prepends a CHANGELOG.md entry. The package version is bumped
-at the same level as the upstream change (major/minor/patch). Prints the new
-package version.
+Sets the given Dockerfile ARGs (which must already exist), updates
+CloudronManifest.json (upstreamVersion, version, dockerImage) and prepends a
+CHANGELOG.md entry. The package version is bumped at the same level as the
+upstream change (major/minor/patch). Prints the new package version.
+
+Example: bump-upstream.py . 5.3.0 https://github.com/sockudo/sockudo/releases/tag/v5.3.0 \\
+             SOCKUDO_VERSION=5.3.0 SOCKUDO_SHA256=<sha256>
 """
 
 import json
@@ -14,10 +17,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-DOCKERFILE = ROOT / "Dockerfile"
-MANIFEST = ROOT / "CloudronManifest.json"
-CHANGELOG = ROOT / "CHANGELOG.md"
+REPO = Path(__file__).resolve().parent.parent
 
 
 def parse(version):
@@ -37,36 +37,43 @@ def bump(package, old_upstream, new_upstream):
 
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) < 5:
         sys.exit(__doc__)
-    new_upstream, sha256 = sys.argv[1], sys.argv[2]
-    if not re.fullmatch(r"[0-9a-f]{64}", sha256):
-        sys.exit(f"invalid sha256: {sha256}")
+    root = REPO / sys.argv[1]
+    new_upstream, release_url = sys.argv[2], sys.argv[3]
+    args = dict(arg.split("=", 1) for arg in sys.argv[4:])
 
-    manifest = json.loads(MANIFEST.read_text())
+    manifest_file = root / "CloudronManifest.json"
+    dockerfile_file = root / "Dockerfile"
+    changelog_file = root / "CHANGELOG.md"
+
+    manifest = json.loads(manifest_file.read_text())
     old_upstream = manifest["upstreamVersion"]
     if parse(new_upstream) <= parse(old_upstream):
         sys.exit(f"{new_upstream} is not newer than {old_upstream}")
 
+    dockerfile = dockerfile_file.read_text()
+    for name, value in args.items():
+        if not re.fullmatch(r"[A-Za-z0-9.:~+_-]+", value):
+            sys.exit(f"refusing unexpected characters in {name}={value}")
+        dockerfile, count = re.subn(rf"^ARG {name}=.*$", f"ARG {name}={value}", dockerfile, flags=re.M)
+        if count != 1:
+            sys.exit(f"Dockerfile has no single 'ARG {name}=' line")
+
     version = ".".join(str(part) for part in bump(parse(manifest["version"]), parse(old_upstream), parse(new_upstream)))
     image = manifest["dockerImage"].rsplit(":", 1)[0]
-
     manifest["upstreamVersion"] = new_upstream
     manifest["version"] = version
     manifest["dockerImage"] = f"{image}:{version}"
-    MANIFEST.write_text(json.dumps(manifest, indent=2) + "\n")
 
-    dockerfile = DOCKERFILE.read_text()
-    dockerfile = re.sub(r"^ARG SOCKUDO_VERSION=.*$", f"ARG SOCKUDO_VERSION={new_upstream}", dockerfile, flags=re.M)
-    dockerfile = re.sub(r"^ARG SOCKUDO_SHA256=.*$", f"ARG SOCKUDO_SHA256={sha256}", dockerfile, flags=re.M)
-    DOCKERFILE.write_text(dockerfile)
-
+    dockerfile_file.write_text(dockerfile)
+    manifest_file.write_text(json.dumps(manifest, indent=2) + "\n")
     entry = (
         f"[{version}]\n"
-        f"* Update Sockudo to {new_upstream}\n"
-        f"* [Full changelog](https://github.com/sockudo/sockudo/releases/tag/v{new_upstream})\n\n"
+        f"* Update {manifest['title']} to {new_upstream}\n"
+        f"* [Full changelog]({release_url})\n\n"
     )
-    CHANGELOG.write_text(entry + CHANGELOG.read_text())
+    changelog_file.write_text(entry + changelog_file.read_text())
 
     print(version)
 
