@@ -1,0 +1,55 @@
+{
+  "stable": true,
+  "versions": {
+    "1.0.0": {
+      "manifest": {
+        "id": "io.github.fx6w9wzk.redis",
+        "title": "Redis",
+        "author": "Redis Ltd.",
+        "tagline": "In-memory data store, reachable over TLS",
+        "version": "1.0.0",
+        "upstreamVersion": "8.10.3",
+        "description": "Redis is an in-memory data store used as a cache, message broker and database. This package installs Redis from the official Redis APT repository (packages.redis.io). It exposes Redis on a TCP port that only accepts TLS connections with a password.\n\n### This package\n\n* TLS with the app domain's certificate from Cloudron. Clients connect with `rediss://default:<password>@<app domain>:<port>`.\n* A random password is generated on first start (`/app/data/credentials.env`).\n* Data is persisted with AOF and RDB snapshots in `/app/data/redis` and included in Cloudron backups.\n* `maxmemory` is set to 75% of the app's memory limit. Change the memory limit in the app's resource settings.\n* Your own settings go into `/app/data/redis.conf`.\n",
+        "changelog": "* Initial version for Redis 8.10.3\n",
+        "postInstallMessage": "Redis only accepts TLS connections with a password. The password was generated on first start and is in `/app/data/credentials.env`. Open it with the File Manager or the Web Terminal.\n\nConnection URL:\n\n```\nrediss://default:<password>@$CLOUDRON-APP-DOMAIN:<port>\n```\n\n`<port>` is the TCP port you chose during installation (default `6380`). Cloudron opens it in the firewall. It is reachable from the internet, so keep the password secret.\n\nFor Sockudo from the same repository, put this into Sockudo's `/app/data/env.sh`:\n\n```\nexport SOCKUDO_REDIS_URL=\"rediss://default:<password>@$CLOUDRON-APP-DOMAIN:<port>/0\"\n```\n",
+        "website": "https://redis.io/",
+        "documentationUrl": "https://redis.io/docs/latest/",
+        "packagerName": "FX6W9WZK",
+        "packagerUrl": "https://github.com/FX6W9WZK",
+        "packageUrl": "https://github.com/FX6W9WZK/cloudron-sockudo/tree/main/redis",
+        "icon": "file://logo.png",
+        "iconUrl": "https://raw.githubusercontent.com/FX6W9WZK/cloudron-sockudo/main/redis/logo.png",
+        "mediaLinks": [
+          "https://raw.githubusercontent.com/FX6W9WZK/cloudron-sockudo/main/redis/logo.png"
+        ],
+        "tags": [
+          "developer",
+          "database",
+          "cache",
+          "redis"
+        ],
+        "dockerImage": "ghcr.io/fx6w9wzk/cloudron-redis:1.0.0",
+        "healthCheckPath": "/healthz",
+        "httpPort": 8000,
+        "tcpPorts": {
+          "REDIS_TLS_PORT": {
+            "title": "Redis (TLS)",
+            "description": "Redis port. Only TLS connections with password are accepted.",
+            "defaultValue": 6380,
+            "containerPort": 6380
+          }
+        },
+        "memoryLimit": 536870912,
+        "manifestVersion": 2,
+        "minBoxVersion": "9.1.0",
+        "addons": {
+          "localstorage": {},
+          "tls": {}
+        }
+      },
+      "creationDate": "Fri, 30 Oct 2026 19:26:15 GMT",
+      "ts": "Fri, 30 Oct 2026 19:26:15 GMT",
+      "publishState": "published"
+    }
+  }
+}
