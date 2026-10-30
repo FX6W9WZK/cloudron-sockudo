@@ -15,6 +15,9 @@
     "enabled": false,
     "driver": "redis"
   },
+  "push": {
+    "allow_memory_drivers": true
+  },
   "metrics": {
     "enabled": true,
     "driver": "prometheus",

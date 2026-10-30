@@ -36,6 +36,8 @@ On first start, the package creates `/app/data/config.json` with one app and ran
 
 Redis backs the cache and the webhook queue. The adapter is `local` because a Cloudron app runs as a single instance. Prometheus metrics listen on `127.0.0.1:9601` inside the container only.
 
+Sockudo's native mobile push (FCM, APNs, Web Push) is off by default. Its store runs in memory, so the config sets `push.allow_memory_drivers: true`. Sockudo refuses to start in production mode without that flag. If you need durable native push, see the [push docs](https://sockudo.io/docs/server/push-notifications).
+
 ### Client example (pusher-js / Laravel Echo)
 
 ```js
