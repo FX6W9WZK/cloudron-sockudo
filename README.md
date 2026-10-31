@@ -10,21 +10,63 @@ This repository also contains a second app: **[Redis](redis/)**, a standalone Re
 
 ## Install
 
-Requires Cloudron **9.1** or newer, which added community app support.
+Requires Cloudron **9.1** or newer. Cloudron does not review community apps, so only install packages you trust.
 
-1. In the Cloudron dashboard, add this URL under **Community apps**:
+| App | `CloudronVersions.json` URL |
+| --- | --- |
+| Sockudo | `https://raw.githubusercontent.com/FX6W9WZK/cloudron-sockudo/main/CloudronVersions.json` |
+| Redis (optional) | `https://raw.githubusercontent.com/FX6W9WZK/cloudron-sockudo/main/redis/CloudronVersions.json` |
 
+To add an app, open the **Add custom app** menu in the Cloudron dashboard, choose the community app option and paste the URL into the **Install Community App** dialog. Updates then arrive like any other app update. To stay on a version, turn off automatic updates in the app's settings.
+
+### Sockudo with the built-in Redis
+
+1. Install **Sockudo** on a subdomain, for example `ws.example.com`.
+2. The app log shows `Default app created: id=… key=…`. The secret is in `/app/data/config.json` (File Manager or Web Terminal).
+3. Point your clients at `ws.example.com`, see the [client example](#client-example-pusher-js--laravel-echo).
+
+Sockudo uses the Redis addon that Cloudron provides to every app. There is nothing else to set up.
+
+### Sockudo with the Redis app
+
+Install Redis first, so Sockudo can be connected right away.
+
+1. Install **Redis** on a subdomain, for example `redis.example.com`. Keep the suggested TCP port `6380`; it must not be in use on the server.
+2. Open `https://redis.example.com`. The page should say *Redis is running*.
+3. Copy the password from the Redis app's `/app/data/credentials.env`.
+4. Install **Sockudo** on a subdomain, for example `ws.example.com`.
+5. Add this line to Sockudo's `/app/data/env.sh`, using your password and domain, then restart Sockudo:
+
+   ```bash
+   export SOCKUDO_REDIS_URL="rediss://default:PASSWORD@redis.example.com:6380/0"
    ```
-   https://raw.githubusercontent.com/FX6W9WZK/cloudron-sockudo/main/CloudronVersions.json
-   ```
 
-2. Install **Sockudo** on a subdomain, for example `ws.example.com`.
+6. The Sockudo log should show `Using external Redis at redis.example.com:6380 (db 0, tls true)`.
 
-You can also use the CLI:
+Always connect to the Redis app by its domain, not its IP address: the TLS certificate is issued for the domain. More options are described under [Redis: addon or external server](#redis-addon-or-external-server).
+
+### With the CLI
 
 ```bash
+cloudron install --versions-url https://raw.githubusercontent.com/FX6W9WZK/cloudron-sockudo/main/redis/CloudronVersions.json --location redis
 cloudron install --versions-url https://raw.githubusercontent.com/FX6W9WZK/cloudron-sockudo/main/CloudronVersions.json --location ws
 ```
+
+### Moving from a self-installed Sockudo or redis-server
+
+* **Keep your app credentials.** In `/app/data/config.json`, replace `id`, `key` and `secret` of the generated app under `app_manager.array.apps` with your existing ones (plus any limits or options), then restart. Copy only the app entries, not your whole old config: the package sets the listener and the Redis connection itself on every start. If your old setup loaded apps from MySQL or PostgreSQL, add them to this list instead.
+* **Clients only change host and port.** On Cloudron, Sockudo is reached through the app domain on port 443 with TLS, see the [client example](#client-example-pusher-js--laravel-echo).
+* **No Redis data to move for Sockudo.** It only keeps short-lived data in Redis (cache, webhook queue). If other programs store data in your old Redis, moving that data is a separate step.
+* **Free the port first.** Stop an old `redis-server` on the same server before installing the Redis app if it uses port `6380`, and remove it afterwards: Cloudron does not support extra software on the host.
+
+### Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| *Could not load app* when adding the URL | GitHub serves these files from a cache for up to 5 minutes after a change. Try again later. If the message stays, [open an issue](https://github.com/FX6W9WZK/cloudron-sockudo/issues) with the full text. |
+| Sockudo does not start after setting `SOCKUDO_REDIS_URL` | The log shows the reason, for example an invalid URL or a wrong password. Fix or remove the line in `env.sh` and restart. Without the line, Sockudo falls back to the built-in Redis. |
+| Sockudo cannot reach the Redis app | Check that the TCP port is enabled in the Redis app's settings and that a firewall at your hosting provider allows it. Cloudron only opens its own firewall. |
+| Clients cannot connect | Use port 443 with TLS (`forceTLS: true`, `PUSHER_SCHEME=https`). The app's internal port 6001 is not reachable from outside. |
 
 ## Configuration
 
