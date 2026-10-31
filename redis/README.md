@@ -6,7 +6,7 @@ A [Cloudron](https://www.cloudron.io/) community app package for [Redis](https:/
 
 ## Install
 
-Requires Cloudron **9.1** or newer. In the Cloudron dashboard, add this URL under **Community apps**:
+Requires Cloudron **9.1** or newer. Open the **Add custom app** menu in the Cloudron dashboard, choose the community app option and paste this URL into the **Install Community App** dialog:
 
 ```
 https://raw.githubusercontent.com/FX6W9WZK/cloudron-sockudo/main/redis/CloudronVersions.json
@@ -18,7 +18,9 @@ Or with the CLI:
 cloudron install --versions-url https://raw.githubusercontent.com/FX6W9WZK/cloudron-sockudo/main/redis/CloudronVersions.json --location redis
 ```
 
-During installation, Cloudron asks for the **Redis (TLS)** TCP port (default `6380`).
+During installation, Cloudron asks for the **Redis (TLS)** TCP port (default `6380`). It must not be in use on the server.
+
+To use it with Sockudo, follow the [step-by-step guide](../#sockudo-with-the-redis-app) in the main README.
 
 ## Security
 
