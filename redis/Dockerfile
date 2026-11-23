@@ -3,8 +3,8 @@ FROM cloudron/base:5.0.0@sha256:04fd70dbd8ad6149c19de39e35718e024417c3e01dc9c663
 LABEL org.opencontainers.image.source=https://github.com/FX6W9WZK/cloudron-sockudo
 
 # Managed by .github/workflows/check-upstream.yml - do not rename these ARGs.
-ARG REDIS_VERSION=8.10.3
-ARG REDIS_APT_VERSION=6:8.10.3-1rl1~noble1
+ARG REDIS_VERSION=8.12.0
+ARG REDIS_APT_VERSION=6:8.12.0-1rl1~noble1
 
 # Signing key of the official Redis APT repository (packages.redis.io)
 ARG REDIS_KEY_FINGERPRINT=54318FA4052D1E61A6B6F7BB5F4349D6BF53AA0C
